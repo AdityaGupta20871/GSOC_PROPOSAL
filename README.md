@@ -48,6 +48,28 @@ Based on an analysis of the codebase and Bruno's vision, I've identified the fol
 7. **Bounty Platform Integration**: Potential to incorporate elements from the Bountiful proposal for decentralized bounty management.
 
 
+### 2.1. Current State Analysis
+
+#### Technology Stack
+
+#### Frontend
+- **SvelteKit**: Modern web framework for building Svelte applications
+- **TypeScript**: Typed superset of JavaScript for improved developer experience
+- **Tailwind CSS**: Utility-first CSS framework for rapid UI development
+
+#### Blockchain Interaction
+- **Fleet SDK**:
+  - `@fleet-sdk/compiler`: For compiling ErgoScript contracts
+  - `@fleet-sdk/core`: Core libraries for Ergo blockchain interaction
+
+#### Wallet Integration
+- **Nautilus Wallet**: Via ergoConnector for user authentication and transaction signing
+
+#### Smart Contracts
+- **ErgoScript**: Versions 1.0 and 1.1
+  - UTXO-based smart contract language specific to the Ergo blockchain
+
+
 ## 3. Proposed Technical Implementations
 
 To address these gaps and align with Bruno's vision, I propose implementing the following features in priority order:
