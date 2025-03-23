@@ -5,7 +5,7 @@
 ### Contact Information
 Name: [Aditya Gupta]
 
-Email: [aditya.gupta20871@gmail.com]
+Email: [adityagupta20871@gmail.com]
 
 GitHub: [https://github.com/AdityaGupta20871]
 
