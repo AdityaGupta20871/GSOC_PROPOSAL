@@ -1238,7 +1238,6 @@ This model provides a pragmatic balance between trustlessness and efficiency, en
 6. [IPFS HTTP Client](https://github.com/ipfs/js-ipfs/tree/master/packages/ipfs-http-client) - JavaScript client library for IPFS
 7. [Svelte](https://svelte.dev/) - UI framework for efficient component-based development
 8. [Ergo Explorer API](https://github.com/ergoplatform/explorer-backend) - API for querying blockchain data
-9. [ErgoFund](https://github.com/anon-real/ErgoFund) - Open-source crowdfunding platform on Ergo
 10. [SigmaUSD](https://github.com/anon-real/sigma-usd) - Reference for handling stablecoins on Ergo
 
 
