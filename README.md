@@ -640,369 +640,376 @@ This system creates proper economic incentives for marketing while preventing ab
 
 Using Ergo's native capabilities, I'll implement this with minimal overhead while ensuring security and transparency for all participants.
 
-## 6. Optimized Blockchain Data Fetching
+## 6. Optimized Blockchain Data Fetching Solutions
 
-**Technical Challenge:** The current implementation fetches all projects from the blockchain without pagination, which could lead to performance issues as the number of projects grows into the thousands or millions.
+## Background
+The Ergo blockchain API has limitations in filtering and sorting capabilities:
+1. Sorting is restricted to default order and its reverse
+2. Register-based filtering is complex since registers like R9 contain different types of information
+3. The API doesn't support text searches within register content
 
-**Innovative Solution:** Implement a robust pagination system with lazy-loading capabilities for both the frontend and blockchain data retrieval layers.
+## Innovative Solutions
 
-**Optimization Strategy:**
+### 1. Smart Caching Strategy
 
-1. **Blockchain-Level Pagination:**
-   ```typescript
-   // Optimized fetch_projects function with proper pagination
-   export async function fetch_projects(
-     offset: number = 0,
-     limit: number = 20,
-     onlyLatest: boolean = true
-   ): Promise<{ projects: Map<string, Project>, hasMore: boolean }> {
-     // Using more efficient querying with appropriate limits
-     const versions: contract_version[] = ["v1_0", "v1_1"];
-     let projects = new Map<string, Project>();
-     let hasMore = false;
-     
-     for (const version of versions) {
-       // Make a single API call with proper limits instead of loading everything
-       const url = explorer_uri + '/api/v1/boxes/unspent/search';
-       const response = await fetch(url + '?' + new URLSearchParams({
-         offset: offset.toString(),
-         limit: limit.toString(),
-       }), {
-         method: 'POST',
-         body: JSON.stringify({
-           "ergoTreeTemplateHash": get_template_hash(version),
-           // Other parameters remain the same
-         }),
-       });
-       
-       // Process the response and set hasMore flag if more data exists
-       if (response.ok) {
-         const json_data = await response.json();
-         hasMore = json_data.items.length === limit;
-         // Process items into projects map
-       }
-     }
-     
-     return { projects, hasMore };
-   }
-   ```
+**Solution:** Implement a TTL-based (Time-To-Live) caching mechanism that stores API responses in memory with an expiration time. This reduces repeated API calls for the same data and implements background refresh to ensure data freshness without impacting user experience.
 
-2. **Frontend Pagination Controls:**
-   ```typescript
-   // Frontend state management 
-   let currentPage: number = 1;
-   let projectsPerPage: number = 20;
-   let totalProjects: number = 0;
-   let hasMoreProjects: boolean = true;
-   
-   async function loadNextPage() {
-     if (!hasMoreProjects || isLoading) return;
-     
-     isLoading = true;
-     const offset = (currentPage - 1) * projectsPerPage;
-     
-     try {
-       const { projects: newProjects, hasMore } = await platform.fetch(offset, projectsPerPage);
-       
-       // Merge with existing projects or replace them
-       updateProjectsStore(newProjects);
-       
-       hasMoreProjects = hasMore;
-       currentPage++;
-     } finally {
-       isLoading = false;
-     }
-   }
-   ```
+**Files to modify:**
+- **New File: `src/lib/ergo/cache.ts`**
+  ```typescript
+  // Create a generic cache class with TTL support
+  export class BlockchainCache<T> {
+    // Store cache items with expiration timestamps
+    // Implement get, set, invalidate methods
+    // Add background refresh logic for expiring items
+  }
 
-3. **User Interface Integration:**
+  // Export a singleton instance for projects
+  export const projectsCache = new BlockchainCache<Map<string, Project>>();
+  ```
+
+- **Modify: `src/lib/ergo/fetch.ts`**
+  ```typescript
+  // Modify fetch_projects to use cache
+  export async function fetch_projects(offset: number = 0): Promise<Map<string, Project>> {
+    // Use cache.get with a fetch function as fallback
+    return projectsCache.get(`projects-${offset}`, 
+      () => fetchProjectsFromBlockchain(offset));
+  }
+  ```
+
+### 2. Client-Side Indexing and Filtering
+
+**Solution:** Create an in-memory index of fetched projects to enable powerful text search, sorting, and filtering operations entirely on the client side. This approach bypasses API limitations by performing post-processing on already retrieved data.
+
+**Files to modify:**
+- **New File: `src/lib/ergo/memoryIndex.ts`**
+  ```typescript
+  // Create an in-memory search index
+  export class MemoryIndex {
+    // Store tokenized text for fast search
+    // Implement methods for search, filter, and sort
+    // Optimize for performance with weighted fields
+  }
+  ```
+
+### 3. Progressive Loading Pattern
+
+**Solution:** Implement an infinite-scroll pattern that loads data in small batches and renders only the visible elements. This reduces memory consumption and improves performance when dealing with large datasets.
+
+**Files to modify:**
+- **New/Modify: `src/routes/+page.svelte`** (or your project list view)
+  ```typescript
+  // Implement virtual scrolling with IntersectionObserver
+  // Load projects in batches when user scrolls
+  // Apply client-side filtering and sorting
+  ```
+
+### 4. Integration Strategy
+
+**Theory:** Combine the above approaches into a unified data access layer that handles caching, filtering, and progressive loading. This creates a seamless experience that feels like a native app despite API limitations.
+
+**Files to modify:**
+- **New File: `src/lib/ergo/dataAccess.ts`**
+  ```typescript
+  // Create a facade for data operations
+  export async function getFilteredProjects(options) {
+    // Use cache for raw data
+    // Apply in-memory filtering
+    // Support pagination
+  }
+  ```
+
+## Implementation Steps
+
+1. **Start with Caching (Highest ROI)**
+   - Implement the cache layer first
+   - Integrate with existing fetch_projects function
+
+2. **Add Memory Indexing**
+   - Build a simple index for client-side search
+   - Implement basic filter/sort operations
+
+3. **Implement Progressive Loading**
+   - Modify project list component to load in batches
+   - Add intersection observer for infinite scroll
+
+## Benefits
+
+1. **Performance:** Reduced API calls and data processing
+2. **UX Improvements:** Faster search, filter, and scroll operations
+3. **Network Resilience:** Better handling of slow connections
+4. **Memory Efficiency:** Only render what's visible
+
+## Future Considerations
+
+- Consider using IndexedDB for persistent cache
+- Implement compression for cached data
+- Add background sync for offline support
+
+## 7. Lightweight Reputation & Comment System for Bene
+
+## Overview
+
+A lightweight reputation and comment system for Bene platform using Ergo tokens, focused on verified identities and creator-donor communication rather than a full critic network.
+
+## Token Structure
+
+Using Ergo tokens with data in registers:
+- **R4**: Type tag (verification, comment, spam-alert)
+- **R5**: Reference type (project, comment)
+- **R6**: Target ID (project hash, comment token ID)
+- **R7**: User wallet address
+- **R8**: Positive/negative flag
+- **R9**: Content data (JSON)
+
+## Implementation
+
+### Core Components
+
+```typescript
+// ReputationProof.ts - Basic token structure definition
+export interface ReputationToken {
+  type: string;      // verification, comment, spam-alert
+  referenceType: string;  // project, comment
+  referenceId: string;
+  walletAddress: string;
+  isPositive: boolean;
+  data: object;
+}
+
+// Modified generate_reputation_proof.ts from sigma-reputation-panel
+export async function mintReputationToken(
+  tokenType: string,
+  referenceType: string,
+  referenceId: string,
+  isPositive: boolean,
+  data: object
+): Promise<string> {
+  // Simplified implementation
+  // Uses wallet to sign and mint token with correct registers
+  return transactionId;
+}
+```
+
+### Comment System
+
+```typescript
+// Post a comment on a project
+async function postComment(projectId, content) {
+  return mintReputationToken(
+    "comment",
+    "project",
+    projectId,
+    true,
+    { text: content, timestamp: Date.now() }
+  );
+}
+
+// Fetch comments for a project
+async function getProjectComments(projectId) {
+  // Query blockchain for tokens with:
+  // R4="comment", R5="project", R6=projectId
+  return commentTokens;
+}
+```
+
+### Verification System
+
+```typescript
+// Admin verification approval
+async function approveVerification(walletAddress) {
+  return mintReputationToken(
+    "verification",
+    "wallet",
+    walletAddress,
+    true,
+    { timestamp: Date.now() }
+  );
+}
+
+// Check if user is verified
+async function isVerified(walletAddress) {
+  // Find verification tokens where R7=walletAddress
+  return verificationExists;
+}
+```
+
+## Integration Points
+
+### Backend
+
+1. **API Endpoints**:
+   - `/api/comments/{projectId}` - Get project comments
+   - `/api/verification/{address}` - Check verification status
+
+2. **Blockchain Integration**:
+   - Adapt `generate_reputation_proof.ts` from sigma-reputation-panel
+   - Add register query functions to fetch.ts
+
+### Frontend
+
+1. **Components**:
+   - Comment section on project pages
+   - Verification badges on user profiles
+   - Admin verification dashboard
+
+2. **UI Example** (Comment Section):
    ```svelte
-   <!-- ProjectList.svelte -->
-   <div class="projects-list">
-     <!-- Project cards -->
-     {#each displayedProjects as project}
-       <ProjectCard {project} />
-     {/each}
-     
-     <!-- Pagination controls -->
-     <div class="pagination-controls">
-       {#if isLoading}
-         <LoadingSpinner />
-       {:else if hasMoreProjects}
-         <button on:click={loadNextPage} class="load-more-btn">
-           Load More Projects
-         </button>
-       {/if}
+   <!-- Comment.svelte - Simplified -->
+   <div class="comments">
+     <div class="new-comment">
+       <textarea bind:value={comment}></textarea>
+       <button on:click={submitComment}>Post</button>
      </div>
+     
+     {#each comments as comment}
+       <div class="comment">
+         <span class="address">{comment.walletAddress}</span>
+         <p>{comment.data.text}</p>
+       </div>
+     {/each}
    </div>
    ```
 
-4. **Performance Optimization:**
-   - Implement memory-efficient caching with an LRU (Least Recently Used) strategy
-   - Apply lazy loading to avoid storing all projects in memory simultaneously
-   - Implement search filters that are applied at query time rather than after loading all data
-   - Add sorting options that work with the pagination system
+## Cost Management
 
-5. **Advanced Filtering Logic:**
-   To enhance the filtering capabilities while maintaining memory efficiency with pagination, I'll implement a query-first approach:
+1. **Optional off-chain storage**: Store only content hashes on-chain
+2. **Batch transactions**: Group multiple operations
+3. **Fee previews**: Show cost before posting
 
-   1. **Memory-Efficient Filtering Strategy:**
-      ```
-      // Instead of loading all projects first then filtering:
-      filteredProjects = fetchProjects(offset, limit, filterCriteria)
-      
-      // Define filter criteria object structure:
-      filterCriteria = {
-        searchTerms: string[],
-        statusFilters: string[],
-        categoryFilters: string[],
-        dateRange: [startDate, endDate]
-      }
-      
-      // Memory usage formula:
-      peakMemoryUsage ≈ pageSize * averageProjectSize * (cacheFactor)
-      // Where cacheFactor is configurable (typically 2-3 pages worth)
-      ```
+## Security Features
 
-   2. **LRU Cache Implementation:**
-      ```
-      // When maximum cache size is reached:
-      if (projectsCache.size >= MAX_CACHE_SIZE) {
-        // Remove least recently accessed items first
-        const oldestKey = projectsCache.getLeastRecentlyUsed();
-        projectsCache.delete(oldestKey);
-      }
-      
-      // Access pattern tracking:
-      onProjectAccess(projectId) {
-        projectsCache.markAccessed(projectId);
-      }
-      ```
-
-   3. **Query-First Algorithm:**
-      ```
-      async function getFilteredProjects(filterParams) {
-        // Check if query is cached
-        const cacheKey = generateCacheKey(filterParams);
-        
-        if (queryCache.has(cacheKey)) {
-          return queryCache.get(cacheKey);
-        }
-        
-        // Construct query parameters
-        const queryParams = {
-          offset: filterParams.offset,
-          limit: filterParams.limit,
-          // Convert client filters to API parameters
-          apiFilters: convertToApiFilters(filterParams.filters)
-        };
-        
-        // Fetch only what's needed
-        const result = await fetchFilteredFromAPI(queryParams);
-        
-        // Store with expiration
-        queryCache.set(cacheKey, result, CACHE_EXPIRY_TIME);
-        
-        return result;
-      }
-      ```
-
-**Files to Modify:**
-
-1. `src/lib/ergo/fetch.ts` - Replace the current approach with:
-   - Add filter parameters to API calls
-   - Implement proper limit/offset handling
-   - Separate count query to get total records without fetching all data
-
-2. `src/routes/ProjectList.svelte` - Refactor to use:
-   - Query-based filtering instead of in-memory filtering
-   - Virtual scrolling or pagination UI elements
-   - Filter state persistence between navigations
-
-3. `src/lib/common/store.ts` - Implement:
-   - LRU caching strategy for projects
-   - Cache invalidation mechanisms
-   - Separate stores for filter state and results
-
-4. `src/lib/common/project.ts` - Add:
-   - Query parameter normalization
-   - Filter conversion utilities (client format → API format)
-   - Memory usage optimization utilities
-
-This memory-efficient approach addresses the core issue by:
-- Never loading all projects into memory at once
-- Caching only what's needed with proper eviction strategies
-- Sending filter criteria to the API rather than fetching everything first
-- Maintaining responsiveness while dramatically reducing memory footprint
-
-The implementation ensures that even with millions of projects in the blockchain, the application will maintain stable memory usage and performance, avoiding the browser crashes mentioned in the conversation.
-
-This approach addresses the scalability concerns in three key ways:
-1. **Efficient API Usage:** We only fetch the data we need, when we need it, using proper offset and limit parameters.
-
-2. **Improved User Experience:** Users see results immediately and can load more as needed instead of waiting for all projects to load.
-
-3. **Future-Proof Design:** The system will continue to perform well as the number of projects grows to any size.
-
-The implementation leverages Ergo's existing pagination capabilities (offset and limit parameters) while enhancing the application to manage paginated data efficiently on the frontend.
-
-## 7. Enhanced User Experience and Wallet Balance Controls
-
-To improve the user experience and prevent failed transactions, I will implement enhanced wallet balance controls that dynamically update UI elements based on available funds.
-#### 7. Balance-Aware UI Component Enhancement
-
-**Technical Challenge:** The current implementation doesn't consider available wallet balances when showing action buttons, causing confusion and failed transactions when users attempt actions without sufficient funds.
-
-**Innovative Solution:** Develop a comprehensive balance tracking system that dynamically enables/disables UI controls and limits input amounts based on real-time wallet state.
-
-**Technical Implementation:**
-
-The following files would need to be modified:
-- `src/routes/App.svelte` - Add balance-aware logic
-- `src/lib/components/Theme.svelte` - New component for theme handling
-- `src/routes/ProjectDetails.svelte` - Add visualization components
-- `src/components/ProjectCard.svelte` - Enhance design for better UX
-
-1. **Reactive wallet balance variables:**
-   ```typescript
-   // In WalletBalance.svelte - Core balance logic
-   let userErgBalance = 0; // User's ERG balance
-   let userTokenBalance = 0; // User's project token balance  
-   let maxContributeAmount = 0; // Maximum amount user can contribute
-   
-   async function getWalletBalances() {
-     // Fetch and calculate available token balances
-     const userProjectTokens = await platform.get_balance(project.token_id);
-     userTokenBalance = userProjectTokens / Math.pow(10, project.token_details.decimals);
-     
-     // Get ERG balance
-     userErgBalance = ($balance || 0) / Math.pow(10, 9);
-     
-     // Calculate maximum contribution amount based on both ERG balance and available tokens
-     maxContributeAmount = Math.min(
-       (userErgBalance / ((project.exchange_rate * Math.pow(10, project.token_details.decimals - 9)))), 
-       (project.total_pft_amount - project.sold_counter) / Math.pow(10, project.token_details.decimals)
-     );
-   }
-   ```
-
-2. **Balance-aware action buttons:**
-   ```html
-   <!-- Contribute button with balance-aware disabling -->
-   <Button 
-     on:click={setupContribution}
-     disabled={!(project.total_pft_amount !== project.sold_counter) || maxContributeAmount <= 0}
-   >
-     Contribute
-   </Button>
-   ```
-
-3. **Maximum amount enforcement in transaction forms:**
-   ```html
-   <Input
-     type="number"
-     bind:value={contributeAmount}
-     min="0"
-     max={maxContributeAmount}
-   />
-   ```
-
-**Key Benefits:**
-- Prevents failed transactions due to insufficient funds
-- Dynamically updates UI elements based on wallet state
-- Improves user experience with clear visual feedback
+1. **Wallet signatures**: Ensure comment authenticity
+2. **Admin approval flow**: For verification status
+3. **Spam detection**: Flag comments with multiple spam reports
 
 
-## 8. Project Milestone System
 
-**Technical Implementation Approach**
 
-#### Contract Modification Strategy
+## 8. Wallet Balance Controls Enhancement - Implementation Status
 
-1. **Milestone Data Structure in Registers:**
-   ```
-   // Store in R6 register
-   R6: Coll[SLong] = [
-     totalMilestones,       // Total number of milestones (2-3)
-     currentMilestone,      // Active milestone (0-based)
-     milestone1Percentage,  // Funding % for milestone 1
-     milestone2Percentage,  // Funding % for milestone 2
-     milestone3Percentage,  // Funding % for milestone 3
-     milestone1Threshold,   // Required votes % for milestone 1
-     milestone2Threshold,   // Required votes % for milestone 2
-     milestone3Threshold,   // Required votes % for milestone 3
-     milestone1Votes,       // Current votes for milestone 1
-     milestone2Votes,       // Current votes for milestone 2
-     milestone3Votes        // Current votes for milestone 3
-   ]
-   ```
+## Overview
+This point outlines the status of the wallet balance controls enhancement, which aims to improve user experience by dynamically updating UI elements based on available funds and preventing failed transactions.
 
-2. **Fund Release Formula:**
-   ```
-   // Calculate releasable amount for a milestone
-   releasableAmount(milestoneIndex) = 
-     totalFunds * (milestones(2 + milestoneIndex) / 100) - alreadyReleased
-   
-   // Approval threshold calculation
-   isMilestoneApproved = 
-     milestones(8 + milestoneIndex) >= milestones(5 + milestoneIndex)
-   ```
+## Currently Implemented Features
 
-3. **Voting Weight Formula:**
-   ```
-   // Token-weighted voting
-   voterWeight = voterPftBalance / totalPftSupply
-   
-   // Update milestone votes
-   newVotes = currentVotes + (voterWeight * 100)
-   ```
+### 1. Balance Variables and Tracking
+- ✅ Reactive wallet balance variables in ProjectDetails.svelte:
+  ```typescript
+  let userErgBalance = 0;
+  let userProjectTokenBalance = 0;
+  let userTemporalTokenBalance = 0;
+  let maxContributeAmount = 0;
+  let maxRefundAmount = 0;
+  let maxCollectAmount = 0;
+  let maxWithdrawTokenAmount = 0;
+  let maxWithdrawErgAmount = 0;
+  ```
 
-### Files to Modify:
+- ✅ Comprehensive `getWalletBalances()` function that:
+  - Fetches and calculates current ERG balance
+  - Retrieves user's project and temporal token balances
+  - Calculates maximum amounts for various actions based on balances
+  - Handles project owner-specific balance calculations
 
-1. **Contract and Box Logic:**
-   - `src/lib/ergo/contract.ts` - Add milestone conditions to contract template
-   - `src/lib/ergo/actions/withdraw.ts` - Implement phased withdrawal logic
-   - `src/lib/ergo/actions/submit.ts` - Add milestone configuration
+- ✅ Balance updating triggered when connection state changes:
+  ```typescript
+  $: if ($connected) {
+      getWalletBalances();
+  }
+  ```
 
-2. **UI Components:**
-   - `src/routes/NewProject.svelte` - Add milestone configuration interface
-   - `src/routes/ProjectDetails.svelte` - Add milestone tracking and voting UI
-   - Create new component: `src/lib/components/MilestoneVoting.svelte`
+### 2. Balance Display and Periodic Updates
+- ✅ ERG balance display in the navigation bar in App.svelte
+- ✅ Periodic wallet info updates (every 30 seconds) in App.svelte:
+  ```typescript
+  let balanceUpdateInterval = setInterval(updateWalletInfo, 30000);
+  ```
 
-3. **Data Structures:**
-   - `src/lib/common/project.ts` - Extend Project interface with milestone data
-   - `src/lib/common/store.ts` - Add voting state management
+### 3. Initial Integration
+- ✅ Balance awareness in some form setups with `getWalletBalances()` calls before transaction setup
+- ✅ Basic balance variables structure for tracking different token types
 
-### Implementation Process:
+## Remaining Implementation Tasks
 
-1. **Milestone Configuration:**
-   - When creating a project, creator defines 2-3 milestones with:
-     - Percentage of funds for each milestone (must total 100%)
-     - Approval threshold for each milestone (typically 51%)
-   - These values are encoded in R6 register
+### 1. Input Field Validation
+- ⏳ Add proper max value constraints to all transaction input fields based on available balances:
+  ```svelte
+  <Input
+    type="number"
+    bind:value={value_submit}
+    min="0"
+    max={info_type_to_show === "buy" ? maxContributeAmount : 
+         info_type_to_show === "" ? maxRefundAmount :
+         info_type_to_show === "dev" ? maxWithdrawTokenAmount :
+         info_type_to_show === "dev-collect" ? maxWithdrawErgAmount : 0}
+  />
+  ```
 
-2. **Voting Transaction:**
-   - PFT holders submit a vote transaction that:
-     - References their PFT tokens
-     - Updates the milestone vote count in R6
-     - Records their vote to prevent double-voting
+### 2. Button Disabling Logic
+- ⏳ Add disabled state to action buttons based on available funds:
+  ```svelte
+  <Button 
+    on:click={setupBuy}
+    disabled={!$connected || maxContributeAmount <= 0 || project.sold_counter >= project.total_pft_amount}
+  >
+    Contribute
+  </Button>
+  ```
 
-3. **Fund Release Logic:**
-   - Project owner can only withdraw funds for approved milestones
-   - Each withdrawal updates currentMilestone in R6
-   - Transaction verifies that milestone has sufficient votes
+- ⏳ Ensure all action buttons have appropriate disabling conditions:
+  - Contribute button: disabled when maxContributeAmount <= 0
+  - Refund button: disabled when maxRefundAmount <= 0
+  - Collect button: disabled when maxCollectAmount <= 0
+  - Owner actions: disabled based on withdrawal limits
 
-### Security Considerations:
+### 3. User Feedback Mechanisms
+- ⏳ Add helpful visual feedback explaining why buttons might be disabled:
+  ```svelte
+  {#if $connected && maxContributeAmount <= 0 && project.sold_counter < project.total_pft_amount}
+    <div class="insufficient-funds-message">
+      Insufficient funds for contribution
+    </div>
+  {/if}
+  ```
 
-1. **Double-Voting Prevention:**
-   - Track votes in separate box or off-chain database
-   - Each voter address can only vote once per milestone
+- ⏳ Implement tooltips or helper text showing maximum available amounts
 
-2. **Voting Integrity:**
-   - Snapshot PFT balances at project creation
-   - Vote weight proportional to PFT holdings
+### 4. Balance Refresh Consistency
+- ⏳ Ensure all transaction setup functions call `getWalletBalances()` before opening forms:
+  ```typescript
+  function setupRefund() {
+      getWalletBalances(); // Add this call to refresh balances first
+      // Rest of the setup function...
+  }
+  ```
 
-This milestone system enhances project accountability while integrating seamlessly with the existing Benefaction Platform smart contract architecture.
+- ⏳ Add balance refreshes before each transaction execution
+
+### 5. ProjectCard.svelte Enhancements
+- ⏳ Add balance awareness to project cards to indicate which projects user can contribute to
+- ⏳ Visual indicators on cards showing if user has sufficient funds
+
+### 6. Real-Time Updates
+- ⏳ Implement balance updates on form input changes to show real-time affordability
+- ⏳ Add reactive updates to max amount when wallet balance changes during form interaction
+
+## Next Steps
+1. Focus on implementing the input validation constraints first
+2. Add button disabling logic based on available balances
+3. Implement user feedback mechanisms and tooltips
+4. Ensure consistent balance refreshing across all transaction setups
+5. Add visual enhancements to project cards
+
+## Benefits After Completion
+- ✓ Prevention of failed transactions due to insufficient funds
+- ✓ Clear visual feedback for users about available actions
+- ✓ Improved overall user experience with dynamic UI updates
+- ✓ Reduced user confusion and frustration
+
+
+
 
 ## 9. Project Analytics and Dashboard
 
@@ -1359,182 +1366,10 @@ BeneBaseContract (base functionality)
 - Final submission preparation
 - Knowledge transfer to project maintainers
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ##14. Technical Challenges and Solutions
 
-#### Challenge 1: UTXO-Based Token Handling
-Ergo's UTXO model presents challenges for handling multiple token types in fundraising contracts.
 
-**Solution:** Implement a specialized token handling mechanism within the contract:
-```ergoscript
-// Multi-token support in fundraising contract
-{
-  // Token validation logic
-  val isValidToken = {
-    val tokenId = INPUTS(0).tokens(2)._1
-    val registryBox = CONTEXT.dataInputs.filter(box => 
-      box.R4[Coll[Byte]].get == REGISTRY_ID
-    )
-    
-    // Verify token exists in registry
-    val supportedTokens = registryBox(0).R5[Coll[Coll[Byte]]].get
-    supportedTokens.exists(t => t == tokenId)
-  }
-  
-  // Token valuation logic
-  val tokenValueInErgs = {
-    val tokenId = INPUTS(0).tokens(2)._1
-    val tokenAmount = INPUTS(0).tokens(2)._2
-    
-    // For stablecoins, use oracle price feed
-    if (STABLECOIN_IDS.exists(id => id == tokenId)) {
-      val oracleBox = CONTEXT.dataInputs.filter(box => 
-        box.R4[Coll[Byte]].get == ORACLE_ID
-      )(0)
-      
-      val ergPriceInUsd = oracleBox.R5[Long].get
-      val stablecoinValue = (tokenAmount * LONG_MAX) / ergPriceInUsd
-      stablecoinValue
-    } else {
-      // For other tokens, use fixed exchange rate from R7
-      tokenAmount * selfExchangeRate
-    }
-  }
-  
-  // Validation for token purchase with different token types
-  val isValidTokenPurchase = {
-    val exchangeAmount = tokenValueInErgs
-    val correctExchange = OUTPUTS(0).value >= selfValue + exchangeAmount
-    
-    isValidToken && correctExchange && incrementSoldCounterCorrectly
-  }
-}
-```
-
-#### Challenge 2: Milestone-Based Funding Implementation
-Implementing milestone-based funding requires tracking progress and managing partial fund releases.
-
-**Solution:** Design a milestone tracking system with voting mechanism:
-```ergoscript
-// Milestone-based funding validation
-{
-  val milestoneData = {
-    // Milestone data structure: [(milestone_id, required_votes, funds_percentage)]
-    val milestones = selfProjectMetadata.extract(milestoneKey)
-    milestones
-  }
-  
-  val currentMilestone = {
-    val completedMilestones = SELF.R6[(Long, Long, Long)].get._3
-    milestoneData(completedMilestones.toInt)
-  }
-  
-  val isMilestoneComplete = {
-    // Find vote boxes for current milestone
-    val voteBoxes = CONTEXT.dataInputs.filter(box => 
-      box.R4[Int].get == VOTE_TYPE && 
-      box.R5[Int].get == currentMilestone._1
-    )
-    
-    // Count valid votes from token holders
-    val validVotes = voteBoxes.size
-    
-    // Check if votes threshold is reached
-    validVotes >= currentMilestone._2
-  }
-  
-  val withdrawForMilestone = {
-    // Calculate available funds based on milestone percentage
-    val totalFunds = selfValue
-    val milestonePercentage = currentMilestone._3
-    val availableFunds = (totalFunds * milestonePercentage) / 100
-    
-    // Verify withdrawal amount
-    val withdrawalAmount = OUTPUTS(1).value
-    withdrawalAmount <= availableFunds && 
-    OUTPUTS(1).propositionBytes == ownerPubKey.propBytes
-  }
-  
-  // Validate milestone completion and fund release
-  isMilestoneComplete && withdrawForMilestone && incrementMilestoneCounter
-}
-```
-
-#### Challenge 3: Bountiful Smart Contract Implementation
-Implementing the judge-validated bounty system requires careful design of verification mechanisms.
-
-**Solution:** Implement a single-judge bounty contract with secure validation:
-```ergoscript
-// Single-judge bounty contract
-{
-  // Extract contract parameters
-  val bountyAmount = SELF.value
-  val deadline = SELF.R4[Int].get
-  val requirements = SELF.R5[Coll[Byte]].get
-  val judgePublicKey = SELF.R6[SigmaProp].get
-  
-  // Submission validation logic
-  val isValidSubmission = {
-    // Verify judge signature
-    val judgeSigned = judgePublicKey
-    
-    // Verify deadline hasn't passed
-    val beforeDeadline = HEIGHT <= deadline
-    
-    // Verify submission meets requirements
-    val submissionData = INPUTS(0).R5[Coll[Byte]].get
-    val requirementsMet = submissionData.size > 0
-    
-    // Verify payment goes to submitter
-    val paymentToSubmitter = OUTPUTS(1).propositionBytes == INPUTS(0).propositionBytes
-    val correctAmount = OUTPUTS(1).value >= bountyAmount - RECOMMENDED_MIN_FEE_VALUE
-    
-    judgeSigned && beforeDeadline && requirementsMet && paymentToSubmitter && correctAmount
-  }
-  
-  // Refund logic if deadline passes with no valid submission
-  val isRefund = {
-    val afterDeadline = HEIGHT > deadline
-    val refundToCreator = OUTPUTS(0).propositionBytes == creatorPublicKey.propBytes
-    val correctRefundAmount = OUTPUTS(0).value >= bountyAmount - RECOMMENDED_MIN_FEE_VALUE
-    
-    afterDeadline && refundToCreator && correctRefundAmount
-  }
-  
-  // Contract spending conditions
-  isValidSubmission || isRefund
-}
-```
-
-#### Challenge 4: Referral System Implementation
+#### Challenge 1: Referral System Implementation
 Creating a secure referral system requires preventing exploitation while properly tracking contributions.
 
 **Solution:** Design a referral tracking mechanism with anti-exploitation safeguards:
