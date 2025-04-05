@@ -78,7 +78,7 @@ To address these gaps and align with Bruno's vision, I propose implementing the 
 
 **Technical Challenge:** The current contract design primarily handles ERG as the contribution currency.
 
-**Innovative Solution:** Implement a simplified approach that allows the project creator to select a single base token (which can be ERG or any other token, including stablecoins) per project while avoiding unnecessary complexity.
+**Solution:** Implement a simplified approach that allows the project creator to select a single base token (which can be ERG or any other token, including stablecoins) per project while avoiding unnecessary complexity.
 
 **Theoretical Framework:**
 
@@ -244,7 +244,7 @@ To address these gaps and align with Bruno's vision, I propose implementing the 
 
 **Technical Challenge:** The EVM version supports multiple wallets and networks, while the Ergo version has limited wallet support.
 
-**Innovative Solution:** Create a modular wallet integration framework for Ergo that supports multiple wallet providers.
+**Solution:** Create a modular wallet integration framework for Ergo that supports multiple wallet providers.
 
 **Technical Implementation:**
 1. Develop a wallet adapter interface:
@@ -648,7 +648,7 @@ The Ergo blockchain API has limitations in filtering and sorting capabilities:
 2. Register-based filtering is complex since registers like R9 contain different types of information
 3. The API doesn't support text searches within register content
 
-## Innovative Solutions
+## Solutions
 
 ### 1. Smart Caching Strategy
 
