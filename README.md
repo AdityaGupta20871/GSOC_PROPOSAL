@@ -934,7 +934,7 @@ This point outlines the status of the wallet balance controls enhancement, which
 ## Remaining Implementation Tasks
 
 ### 1. Input Field Validation
-- ⏳ Add proper max value constraints to all transaction input fields based on available balances:
+-  Add proper max value constraints to all transaction input fields based on available balances:
   ```svelte
   <Input
     type="number"
@@ -948,7 +948,7 @@ This point outlines the status of the wallet balance controls enhancement, which
   ```
 
 ### 2. Button Disabling Logic
-- ⏳ Add disabled state to action buttons based on available funds:
+-  Add disabled state to action buttons based on available funds:
   ```svelte
   <Button 
     on:click={setupBuy}
@@ -958,14 +958,14 @@ This point outlines the status of the wallet balance controls enhancement, which
   </Button>
   ```
 
-- ⏳ Ensure all action buttons have appropriate disabling conditions:
+-  Ensure all action buttons have appropriate disabling conditions:
   - Contribute button: disabled when maxContributeAmount <= 0
   - Refund button: disabled when maxRefundAmount <= 0
   - Collect button: disabled when maxCollectAmount <= 0
   - Owner actions: disabled based on withdrawal limits
 
 ### 3. User Feedback Mechanisms
-- ⏳ Add helpful visual feedback explaining why buttons might be disabled:
+-  Add helpful visual feedback explaining why buttons might be disabled:
   ```svelte
   {#if $connected && maxContributeAmount <= 0 && project.sold_counter < project.total_pft_amount}
     <div class="insufficient-funds-message">
@@ -974,10 +974,10 @@ This point outlines the status of the wallet balance controls enhancement, which
   {/if}
   ```
 
-- ⏳ Implement tooltips or helper text showing maximum available amounts
+-  Implement tooltips or helper text showing maximum available amounts
 
 ### 4. Balance Refresh Consistency
-- ⏳ Ensure all transaction setup functions call `getWalletBalances()` before opening forms:
+-  Ensure all transaction setup functions call `getWalletBalances()` before opening forms:
   ```typescript
   function setupRefund() {
       getWalletBalances(); // Add this call to refresh balances first
@@ -985,15 +985,15 @@ This point outlines the status of the wallet balance controls enhancement, which
   }
   ```
 
-- ⏳ Add balance refreshes before each transaction execution
+-  Add balance refreshes before each transaction execution
 
 ### 5. ProjectCard.svelte Enhancements
-- ⏳ Add balance awareness to project cards to indicate which projects user can contribute to
-- ⏳ Visual indicators on cards showing if user has sufficient funds
+-  Add balance awareness to project cards to indicate which projects user can contribute to
+-  Visual indicators on cards showing if user has sufficient funds
 
 ### 6. Real-Time Updates
-- ⏳ Implement balance updates on form input changes to show real-time affordability
-- ⏳ Add reactive updates to max amount when wallet balance changes during form interaction
+-  Implement balance updates on form input changes to show real-time affordability
+-  Add reactive updates to max amount when wallet balance changes during form interaction
 
 ## Next Steps
 1. Focus on implementing the input validation constraints first
