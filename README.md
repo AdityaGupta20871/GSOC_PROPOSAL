@@ -74,152 +74,171 @@ Based on an analysis of the codebase and Bruno's vision, I've identified the fol
 
 To address these gaps and align with Bruno's vision, I propose implementing the following features in priority order:
 
-### 3.1 Multi-Token Support With Emphasis on Stablecoins
+## 3.1 Multi-Token Support With Emphasis on Stablecoins
 
 **Technical Challenge:** The current contract design primarily handles ERG as the contribution currency.
 
-**Innovative Solution:** Extend the smart contract to support contributions using other Ergo tokens, with a special focus on stablecoins within the Ergo ecosystem.
+**Innovative Solution:** Implement a simplified approach that allows the project creator to select a single base token (which can be ERG or any other token, including stablecoins) per project while avoiding unnecessary complexity.
 
-**Technical Implementation:**
-1. Modify the existing contract to handle multiple token types:
+**Theoretical Framework:**
+
+1. **Single Base Token Model**
+   - Instead of implementing support for multiple base tokens simultaneously, we adopt a simpler "single base token per project" approach
+   - Each project defines one base token (BT), which can be ERG or any Ergo token including stablecoins
+   - The exchange rate is defined as BT/PFT (Base Token to Proof of Funding Token)
+   - Users contribute using only this designated base token
+
+2. **Register Optimization**
+   - Extend the existing R7 register to store both:
+     - The base exchange rate (as it currently does)
+     - The base token ID (empty string represents ERG)
+   - This approach avoids adding additional registers while maintaining backward compatibility
+
+3. **Transaction Flow Enhancement**
+   - For ERG projects: Transaction flow remains identical to current implementation
+   - For token projects: The contract validates that input tokens match the specified base token ID
+   - Contribution amount validation is based on token quantity rather than ERG value
+
+4. **User Experience Considerations**
+   - Project creators can select their preferred base token during project creation
+   - Contributors can acquire the project's base token from any DEX if they don't already hold it
+   - The UI clearly communicates which token is required for contribution
+
+**Pseudocode Implementation:**
+
+1. **Contract Modification (contract_v1_1.es):**
    ```ergoscript
-   // Snippet showing multi-token handling in contract
-   {
-     // Extract token info from input box
-     val contributionTokenId = INPUTS(0).tokens(0)._1
-     val contributionAmount = INPUTS(0).tokens(0)._2
-     
-     // Verify the token is in the allowed list
-     val isAllowedToken = allowedTokens.exists(t => t == contributionTokenId)
-     
-     // Get the correct exchange rate for this token
-     val exchangeRate = if (contributionTokenId == ERG_TOKEN_ID) {
-       baseExchangeRate
-     } else if (contributionTokenId == SIGUSD_TOKEN_ID) {
-       // Special handling for SigUSD stablecoin with oracle price data
-       val oracleBox = CONTEXT.dataInputs.find(box => 
-         box.R4[Coll[Byte]].get == ERGUSD_ORACLE_NFT_ID
-       )
-       // Convert USD value to ERG equivalent using oracle data
-       val ergUsdPrice = oracleBox.R5[Long].get
-       // Apply stablecoin-specific rate calculation
-       (baseExchangeRate * PRICE_DENOMINATOR) / ergUsdPrice
-     } else {
-       // Look up the token-specific exchange rate for other tokens
-       val tokenRateBox = CONTEXT.dataInputs.find(box => 
-         box.R4[Coll[Byte]].get == contributionTokenId
-       )
-       tokenRateBox.R5[Long].get
-     }
-     
-     // Calculate tokens to distribute based on token-specific rate
-     val tokensToDistribute = contributionAmount * exchangeRate
-     
-     // Further validation logic
-     // ...
-   }
-   ```
-
-2. Implement a token registry contract to maintain a list of supported tokens
-3. Create an oracle system for stablecoin/ERG price feeds:
-   ```ergoscript
-   // Oracle data validation for SigUSD/ERG exchange rate
-   {
-     // Verify the oracle box NFT - this identifies the ERG/USD oracle pool
-     val isValidOracleBox = INPUTS(1).tokens.exists(t => 
-       t._1 == ERGUSD_ORACLE_NFT_ID
-     )
-     
-     // Ensure oracle data is recent
-     val oracleDataTimestamp = INPUTS(1).R6[Long].get
-     val isDataFresh = HEIGHT - oracleDataTimestamp <= MAX_ORACLE_AGE
-     
-     sigmaProp(isValidOracleBox && isDataFresh)
-   }
-   ```
-
-4. Develop the frontend components to allow selection of different tokens for contribution:
-   ```typescript
-   // In tokenSelector.svelte
-   type TokenInfo = {
-     tokenId: string;
-     name: string;
-     symbol: string;
-     decimals: number;
-     logoUrl: string;
-     type: 'native' | 'stablecoin' | 'other';
-     oracleId?: string; // For tokens with oracle feeds like SigUSD
-   };
+   // Extract base token ID and exchange rate from R7
+   val baseTokenId = SELF.R7[Coll[Byte]].get.slice(8, SELF.R7[Coll[Byte]].get.size)
+   val baseExchangeRate = SELF.R7[Long].get
    
-   // Token list including SigUSD stablecoin
-   const supportedTokens: TokenInfo[] = [
-     {
-       tokenId: 'native', // Special case for ERG
-       name: 'Ergo',
-       symbol: 'ERG',
-       decimals: 9,
-       logoUrl: '/assets/ergo-logo.svg',
-       type: 'native'
-     },
-     {
-       tokenId: '03faf2cb329f2e90d6d23b58d91bbb6c046aa143261cc21f52fbe2824bfcbf04',
-       name: 'SigUSD',
-       symbol: 'SigUSD',
-       decimals: 2,
-       logoUrl: '/assets/sigusd-logo.svg',
-       type: 'stablecoin',
-       oracleId: '011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f'
-     }
-   ];
+   // Check if base token is ERG
+   val isErgBaseToken = baseTokenId.size == 0
+   
+   // Validate correct exchange based on token type
+   val correctExchange = if (isErgBaseToken) {
+     // Original ERG logic
+     val deltaValueAdded = OUTPUTS(0).value - selfValue
+     deltaValueAdded == deltaTokenRemoved * baseExchangeRate
+   } else {
+     // Token contribution logic
+     val contributionAmount = INPUTS(1).tokens.filter(_._1 == baseTokenId).fold(0L, (acc, t) => acc + t._2)
+     contributionAmount == deltaTokenRemoved * baseExchangeRate
+   }
    ```
 
-5. Integrate with SigUSD Oracle and AgeUSD protocol:
+2. **Contract Parameters Creation (contract.ts):**
    ```typescript
-   // In tokenService.ts
-   class TokenService {
-     // Fetch current ERG/USD price from oracle
-     async getErgUsdPrice(): Promise<number> {
-       // Fetch the latest oracle pool box for ERG/USD from explorer
-       const oracleBoxes = await explorerClient.getBoxesByTokenId(
-         "011d3364de07e5a26f0c4eef0852cddb387039a921b7154ef3cab22c6eda887f"
-       );
-       
-       // Get the oracle rate from the latest box
-       const latestBox = oracleBoxes[0];
-       const rateInDecimals = parseInt(latestBox.additionalRegisters.R5, 16);
-       
-       // Convert to decimal format
-       return rateInDecimals / 1000000;
-     }
+   function createContractParameters(config) {
+     // Combine exchange rate with base token ID for R7
+     const r7Value = config.baseTokenId 
+       ? bytesToHex(longToByteArray(config.baseExchangeRate)) + config.baseTokenId
+       : config.baseExchangeRate;
      
-     // Function to get token balance from wallet for both ERG and SigUSD
-     async getTokenBalance(walletAddress: string, tokenId?: string): Promise<BigNumber> {
-       const addressInfo = await explorerClient.getAddressInfo(walletAddress);
-       
-       if (!tokenId || tokenId === 'native') {
-         return new BigNumber(addressInfo.balance);
+     return {
+       // Other registers remain the same
+       R7: r7Value
+     };
+   }
+   ```
+
+3. **Transaction Building (buy_refund.ts):**
+   ```typescript
+   function buildBuyTransaction(contractBox, userAddress, amount) {
+     // Extract base token info from R7
+     const baseExchangeRate = BigInt(contractBox.additionalRegisters.R7.value);
+     const baseTokenId = contractBox.additionalRegisters.R7.serializedValue.slice(16); // Skip the 8-byte rate
+     
+     // Calculate token value
+     const tokenValue = amount * baseExchangeRate;
+     
+     // Build different transaction based on token type
+     if (baseTokenId === "") {
+       // Build ERG transaction (existing logic)
+     } else {
+       // Build token transaction
+       return new TransactionBuilder(height)
+         .from(contractBox)
+         .from(userBox) // Contains the tokens
+         .to(new OutputBuilder(contractBox.value + tokenRequirement, contractBox.address)
+             .addTokens({ tokenId: contractBox.tokens[0].tokenId, amount: -amount }))
+         .to(new OutputBuilder(minBoxValue, userAddress)
+             .addTokens({ tokenId: contractBox.tokens[0].tokenId, amount }))
+         .sendChangeTo(userAddress);
+     }
+   }
+   ```
+
+4. **Project Creation (submit.ts):**
+   ```typescript
+   function createProjectWithBaseToken(projectConfig) {
+     // Add base token selection to project creation
+     const baseTokenId = projectConfig.baseTokenId || ""; // Empty for ERG
+     const baseExchangeRate = projectConfig.baseExchangeRate;
+     
+     // Create contract with modified R7
+     const contract = compileContract({
+       // Other parameters
+       baseTokenId,
+       baseExchangeRate
+     });
+     
+     // Create and submit transaction
+   }
+   ```
+
+5. **Token Selection UI:**
+   ```typescript
+   // Simple token selector component
+   function TokenSelector({ onSelect }) {
+     const [tokens, setTokens] = useState([]);
+     
+     useEffect(() => {
+       // Fetch user's tokens from wallet
+       async function loadTokens() {
+         const address = await ergoConnector.nautilus.getChangeAddress();
+         const balance = await ergo.get_balance(address);
+         setTokens(balance.tokens);
        }
        
-       // Find the specified token in the address balance
-       const token = addressInfo.tokens.find(t => t.tokenId === tokenId);
-       return token ? new BigNumber(token.amount) : new BigNumber(0);
-     }
+       loadTokens();
+     }, []);
+     
+     return (
+       <div>
+         <select onChange={(e) => onSelect(e.target.value)}>
+           <option value="">ERG (Native)</option>
+           {tokens.map(token => (
+             <option key={token.tokenId} value={token.tokenId}>
+               {token.name || token.tokenId.substring(0, 8)}
+             </option>
+           ))}
+         </select>
+       </div>
+     );
    }
    ```
 
-**Architecture Diagram:**
-```
-[Contribution Box] → [Multi-Token Contract] → [Project Token Distribution]
-       ↑                      ↓                           ↓
-[Token Registry] ←── [SigUSD Oracle Pool] → [Token-specific Exchange Rates]
-       ↑
-[TokenJay API] ←── [AgeUSD Protocol Interface]
-```
+**Key Advantages:**
+1. Significantly reduces contract complexity
+2. Eliminates the need for data inputs to determine token exchange rates
+3. No separate token registry contract required
+4. Provides flexibility for project creators to use stablecoins or other tokens
+5. Reduces on-chain transaction complexity and costs
+6. Maintains a consistent user experience regardless of base token
 
-**Integration with External Services:**
-1. The system will utilize the TokenJay API for SigUSD operations
-2. Direct integration with the ERG/USD oracle pool for price data
-3. Optional SigUSD/ERG swaps within the platform using the AgeUSD protocol
+**Implementation References:**
+1. For token handling: [Fleet SDK Transaction Building](https://fleet-sdk.github.io/docs/transaction-building)
+2. For token selection UI: [Nautilus Wallet GitHub](https://github.com/nautls/nautilus-wallet)
+3. For DEX integration: [ErgoDEX SDK](https://github.com/ergolabs/ergo-dex-sdk-js)
+
+**Files that Need Modification:**
+1. `contracts/bene_contract/contract_v1_1.es` - Update contract to handle configurable base token
+2. `src/lib/ergo/contract.ts` - Update contract compilation and parameter handling
+3. `src/lib/ergo/actions/buy_refund.ts` - Modify transaction building to handle token inputs
+4. `src/lib/ergo/actions/submit.ts` - Update project creation flow
+5. UI components for token selection
+
 
 ## 4. Multi-Wallet Integration and Network Support
 
